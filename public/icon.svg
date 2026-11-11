@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#141920"/>
+      <stop offset="100%" stop-color="#080A0C"/>
+    </linearGradient>
+    <linearGradient id="primaryGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4CDCDD"/>
+      <stop offset="100%" stop-color="#00A896"/>
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="8" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+  
+  <!-- Base Background -->
+  <rect width="512" height="512" rx="112" fill="url(#bgGrad)"/>
+  <rect width="504" height="504" x="4" y="4" rx="108" fill="none" stroke="#252D37" stroke-width="4"/>
+
+  <!-- Outer Ring of the "O" -->
+  <circle cx="256" cy="256" r="148" fill="none" stroke="url(#primaryGrad)" stroke-width="38" stroke-linecap="round"/>
+  
+  <!-- Inner Glow Accent -->
+  <circle cx="256" cy="256" r="148" fill="none" stroke="#4CDCDD" stroke-width="6" opacity="0.6"/>
+
+  <!-- Play Triangle Center Motif -->
+  <polygon points="236,198 316,256 236,314" fill="#4CDCDD" filter="url(#glow)"/>
+
+  <!-- Subtitle indicator bars at bottom -->
+  <rect x="206" y="340" width="100" height="14" rx="7" fill="#8CEEF0" opacity="0.85"/>
+  <rect x="226" y="362" width="60" height="10" rx="5" fill="#4CDCDD" opacity="0.6"/>
+</svg>

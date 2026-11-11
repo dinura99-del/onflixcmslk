@@ -1,0 +1,96 @@
+{
+  "source": "code-archive (project-migration-studio-main.zip, an existing Lovable TanStack Start project: OnFlix Subtitle Automation)",
+  "capabilities": [
+    {
+      "capability": "code",
+      "source": "src/, public/, scripts/",
+      "outcome": "migrate",
+      "status": "done",
+      "next_action": "none"
+    },
+    {
+      "capability": "schema",
+      "source": "External OnFlix database (content, episodes, top_ten, collections, genres, requests, site_settings, subtitle_automation_jobs, subtitle_automation_settings)",
+      "outcome": "preserve-external",
+      "status": "preserved",
+      "next_action": "The automation's whole job is publishing into the live OnFlix website database, which the OnFlix site itself also reads; moving it to Lovable Cloud would disconnect the OnFlix site. Kept as an external service."
+    },
+    {
+      "capability": "records",
+      "source": "External OnFlix database",
+      "outcome": "preserve-external",
+      "status": "preserved",
+      "next_action": "No export needed; data stays in the OnFlix database."
+    },
+    {
+      "capability": "auth identities",
+      "source": "none \u2014 dashboard is gated by CRON_SECRET, no user accounts",
+      "outcome": "not-applicable",
+      "status": "verified",
+      "next_action": "none"
+    },
+    {
+      "capability": "authorization",
+      "source": "CRON_SECRET check in server functions and /api/public/* routes",
+      "outcome": "migrate",
+      "status": "done",
+      "next_action": "Needs CRON_SECRET secret for live check"
+    },
+    {
+      "capability": "uploaded file bytes",
+      "source": "OnFlix storage bucket (Sinhala .srt files)",
+      "outcome": "preserve-external",
+      "status": "preserved",
+      "next_action": "none"
+    },
+    {
+      "capability": "external providers",
+      "source": "TMDB, EmbedMaster, Wyzie, SubDL, Google GTX, MyMemory, Gemini (multi-key), Groq, GitHub Models, OpenRouter, Tavily",
+      "outcome": "preserve",
+      "status": "pending-credentials",
+      "next_action": "Add secrets, then verify live calls"
+    },
+    {
+      "capability": "public endpoints",
+      "source": "/api/public/cron/scan, /api/public/cron/process, /api/public/manual/stream, /api/public/copilot/chat",
+      "outcome": "preserve",
+      "status": "done",
+      "next_action": "Verify with CRON_SECRET once added"
+    },
+    {
+      "capability": "schedules",
+      "source": "cron-job.org hitting /api/public/cron/*; GitHub Actions .github/workflows/process-queue.yml every 15 min",
+      "outcome": "preserve",
+      "status": "pending-cutover",
+      "next_action": "Workflow file was not in the ZIP; recreated. User must repoint cron-job.org to the new published URL and add GitHub Actions secrets."
+    },
+    {
+      "capability": "secrets",
+      "source": "ONFLIX_SUPABASE_URL, ONFLIX_SUPABASE_SERVICE_KEY, CRON_SECRET, TMDB_API_KEY, GEMINI_API_KEY(_N), GROQ_API_KEY, TAVILY_API_KEY, SUBDL_API_KEY(_N), WYZIE_API_KEY, MYMEMORY_USER_EMAIL, REVALIDATE_SECRET / ONFLIX_REVALIDATION_URL / ONFLIX_REVALIDATION_SECRET, GITHUB_TOKEN, OPENROUTER_API_KEY",
+      "outcome": "preserve",
+      "status": "pending-user",
+      "next_action": "Request via secure secret form"
+    },
+    {
+      "capability": "pwa",
+      "source": "public/manifest.webmanifest, public/sw.js, icons",
+      "outcome": "migrate",
+      "status": "done",
+      "next_action": "none"
+    },
+    {
+      "capability": "cutover",
+      "source": "Old live app onflix-automate.lovable.app",
+      "outcome": "pending",
+      "status": "pending-user",
+      "next_action": "Publish, then repoint cron-job.org and GitHub Actions"
+    },
+    {
+      "capability": "verification",
+      "source": "",
+      "outcome": "verify",
+      "status": "partial",
+      "next_action": "Preview loads (admin access screen), cron routes respond and refuse without CRON_SECRET, 100/103 tests pass (3 Gemini model-order tests already failing in uploaded code). Live engine run needs secrets."
+    }
+  ]
+}

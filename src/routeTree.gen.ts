@@ -10,33 +10,89 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ApiPublicCopilotChatRouteImport } from './routes/api/public/copilot/chat'
+import { Route as ApiPublicCronProcessRouteImport } from './routes/api/public/cron/process'
+import { Route as ApiPublicCronScanRouteImport } from './routes/api/public/cron/scan'
+import { Route as ApiPublicManualStreamRouteImport } from './routes/api/public/manual/stream'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicCopilotChatRoute = ApiPublicCopilotChatRouteImport.update({
+  id: '/api/public/copilot/chat',
+  path: '/api/public/copilot/chat',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicCronProcessRoute = ApiPublicCronProcessRouteImport.update({
+  id: '/api/public/cron/process',
+  path: '/api/public/cron/process',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicCronScanRoute = ApiPublicCronScanRouteImport.update({
+  id: '/api/public/cron/scan',
+  path: '/api/public/cron/scan',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicManualStreamRoute = ApiPublicManualStreamRouteImport.update({
+  id: '/api/public/manual/stream',
+  path: '/api/public/manual/stream',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/api/public/copilot/chat': typeof ApiPublicCopilotChatRoute
+  '/api/public/cron/process': typeof ApiPublicCronProcessRoute
+  '/api/public/cron/scan': typeof ApiPublicCronScanRoute
+  '/api/public/manual/stream': typeof ApiPublicManualStreamRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/api/public/copilot/chat': typeof ApiPublicCopilotChatRoute
+  '/api/public/cron/process': typeof ApiPublicCronProcessRoute
+  '/api/public/cron/scan': typeof ApiPublicCronScanRoute
+  '/api/public/manual/stream': typeof ApiPublicManualStreamRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/api/public/copilot/chat': typeof ApiPublicCopilotChatRoute
+  '/api/public/cron/process': typeof ApiPublicCronProcessRoute
+  '/api/public/cron/scan': typeof ApiPublicCronScanRoute
+  '/api/public/manual/stream': typeof ApiPublicManualStreamRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/api/public/copilot/chat'
+    | '/api/public/cron/process'
+    | '/api/public/cron/scan'
+    | '/api/public/manual/stream'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/api/public/copilot/chat'
+    | '/api/public/cron/process'
+    | '/api/public/cron/scan'
+    | '/api/public/manual/stream'
+  id:
+    | '__root__'
+    | '/'
+    | '/api/public/copilot/chat'
+    | '/api/public/cron/process'
+    | '/api/public/cron/scan'
+    | '/api/public/manual/stream'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ApiPublicCopilotChatRoute: typeof ApiPublicCopilotChatRoute
+  ApiPublicCronProcessRoute: typeof ApiPublicCronProcessRoute
+  ApiPublicCronScanRoute: typeof ApiPublicCronScanRoute
+  ApiPublicManualStreamRoute: typeof ApiPublicManualStreamRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +104,43 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/copilot/chat': {
+      id: '/api/public/copilot/chat'
+      path: '/api/public/copilot/chat'
+      fullPath: '/api/public/copilot/chat'
+      preLoaderRoute: typeof ApiPublicCopilotChatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/cron/process': {
+      id: '/api/public/cron/process'
+      path: '/api/public/cron/process'
+      fullPath: '/api/public/cron/process'
+      preLoaderRoute: typeof ApiPublicCronProcessRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/cron/scan': {
+      id: '/api/public/cron/scan'
+      path: '/api/public/cron/scan'
+      fullPath: '/api/public/cron/scan'
+      preLoaderRoute: typeof ApiPublicCronScanRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/manual/stream': {
+      id: '/api/public/manual/stream'
+      path: '/api/public/manual/stream'
+      fullPath: '/api/public/manual/stream'
+      preLoaderRoute: typeof ApiPublicManualStreamRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ApiPublicCopilotChatRoute: ApiPublicCopilotChatRoute,
+  ApiPublicCronProcessRoute: ApiPublicCronProcessRoute,
+  ApiPublicCronScanRoute: ApiPublicCronScanRoute,
+  ApiPublicManualStreamRoute: ApiPublicManualStreamRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

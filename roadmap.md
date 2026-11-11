@@ -1,0 +1,16 @@
+# Tasks
+- [x] Add all-key cooldown-aware leftover retries, strict Sinhala output, and checkpoint recovery; regression tests pass, real quota-limited publish remains unverified.
+- [x] Add bounded HTTP 503 retry after two seconds and Flash model fallback; 21 tests pass, including recovery, cancellation and immutable timing; live publish remains unverified.
+- [x] Add bounded multi-key Gemini Flash post-editing after base translation.
+- [x] Validate complete cue mapping and keep timestamps immutable before publishing.
+- [x] Display separate polishing progress in Manual Process.
+- [x] Test safety rules and verify integration; live two-cue Gemini request returned HTTP 503, so full publish remains unverified.
+- [x] Import OnFlix automation project from uploaded ZIP; 70 tests pass, admin screen loads.
+- [x] Two-stage translation: free Google draft first, then Gemini polish (queue, Manual, GitHub worker); 81 tests pass, not yet run on a real movie.
+- [ ] Add service keys (OnFlix database URL + service key, CRON_SECRET, TMDB, Gemini, Groq, etc.) — waiting on user.
+- [ ] Point cron-job.org and GitHub Actions at the new address after publishing — waiting on user.
+- [x] Block other-language letters in Sinhala subtitles (new jobs, editor saves, re-publishes); Dark Knight fully repaired.
+- [x] Final review: 503 backoff, all-key rotation, QA-waiting retry with saved polish (95 tests pass; not run on a real movie).
+- [ ] Re-run `npm run repair:subtitles -- --apply` for ~17 still-damaged published subtitles once Gemini quota resets; ~13 others only got letter clean-up and may need a full re-translation — waiting on Gemini quota / user decision.
+- [x] Migrate project from uploaded ZIP into this Lovable project (code, icons, scripts, GitHub worker schedule recreated); 100 of 103 tests pass, admin screen loads.
+- [ ] Fix 3 Gemini model-order tests that already failed in the uploaded code (tests expect the old 3.1 Flash Lite default; code now starts with 3.5 Flash Lite) — waiting on user to confirm which order is intended.

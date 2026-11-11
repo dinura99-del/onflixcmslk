@@ -1,0 +1,63 @@
+{
+  "name": "OnFlix CMS - Subtitle Automation",
+  "short_name": "OnFlix CMS",
+  "description": "OnFlix automated subtitle polishing, queue scanner, and content management system.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0B0E11",
+  "theme_color": "#0B0E11",
+  "lang": "en",
+  "categories": [
+    "productivity",
+    "utilities",
+    "entertainment"
+  ],
+  "icons": [
+    {
+      "src": "/pwa-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/maskable-icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "AI Co-Pilot",
+      "short_name": "Co-Pilot",
+      "description": "Open OnFlix AI Assistant",
+      "url": "/#copilot",
+      "icons": [
+        {
+          "src": "/pwa-192x192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "User Requests",
+      "short_name": "Requests",
+      "description": "View pending user title requests",
+      "url": "/#requests",
+      "icons": [
+        {
+          "src": "/pwa-192x192.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,54 @@
+name: Process subtitle queue
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Ignore retry timers and process now"
+        type: boolean
+        default: false
+  repository_dispatch:
+    types: [process-queue]
+
+concurrency:
+  group: process-queue
+  cancel-in-progress: false
+
+jobs:
+  process:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - name: Run worker
+        run: npx tsx scripts/worker.ts
+        env:
+          FORCE: ${{ github.event.inputs.force == 'true' && 'true' || 'false' }}
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          ONFLIX_SUPABASE_URL: ${{ secrets.ONFLIX_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          ONFLIX_SUPABASE_SERVICE_KEY: ${{ secrets.ONFLIX_SUPABASE_SERVICE_KEY }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_API_KEY_1: ${{ secrets.GEMINI_API_KEY_1 }}
+          GEMINI_API_KEY_2: ${{ secrets.GEMINI_API_KEY_2 }}
+          GEMINI_API_KEY_3: ${{ secrets.GEMINI_API_KEY_3 }}
+          GEMINI_API_KEY_4: ${{ secrets.GEMINI_API_KEY_4 }}
+          GEMINI_API_KEY_5: ${{ secrets.GEMINI_API_KEY_5 }}
+          GEMINI_API_KEY_6: ${{ secrets.GEMINI_API_KEY_6 }}
+          GEMINI_API_KEY_7: ${{ secrets.GEMINI_API_KEY_7 }}
+          SUBDL_API_KEY: ${{ secrets.SUBDL_API_KEY }}
+          WYZIE_API_KEY: ${{ secrets.WYZIE_API_KEY }}
+          MYMEMORY_USER_EMAIL: ${{ secrets.MYMEMORY_USER_EMAIL }}
+          REVALIDATE_SECRET: ${{ secrets.REVALIDATE_SECRET }}
+          ONFLIX_REVALIDATION_URL: ${{ secrets.ONFLIX_REVALIDATION_URL }}
+          ONFLIX_REVALIDATION_SECRET: ${{ secrets.ONFLIX_REVALIDATION_SECRET }}
