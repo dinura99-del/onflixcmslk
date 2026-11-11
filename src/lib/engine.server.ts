@@ -56,7 +56,6 @@ export function envStatus() {
     "ONFLIX_SUPABASE_URL",
     "ONFLIX_SUPABASE_SERVICE_KEY",
     "TMDB_API_KEY",
-    "GROQ_API_KEY",
     "TAVILY_API_KEY",
     "GEMINI_API_KEY",
     "CRON_SECRET",
@@ -398,9 +397,6 @@ async function fetchWyzie(j: any, s?: Partial<Settings>): Promise<string | null>
   return srt.ok ? await srt.text() : null;
 }
 
-const SYS =
-  "You translate SRT subtitles from English to natural, colloquial Sinhala. Keep every cue number and timestamp line EXACTLY unchanged. Translate only spoken dialogue. If any line is a website, URL, watermark, subtitle credit (e.g. 'Subtitles by', 'Sync by', 'Downloaded from') or advertisement, remove that text instead of translating it — never output links or promo credits. Output only the SRT, no commentary.";
-
 const PROMO_DOMAINS = /(opensubtitles|addic7ed|subscene|subdl|yts|yify|podnapisi|tvsubtitles|subsmax|osdb|rarbg|eztv)/i;
 const URL_RE = /\b(?:https?:\/\/|www\.)\S+|\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|org|net|mx|to|tv|io|me|info|co|lk|xyz|cc|ws|ru)\b(?:\/\S*)?/gi;
 const PROMO_PHRASES = /(subtitles?\s+(by|ripped|downloaded|provided)|downloaded\s+from|sync(ed|hroni[sz]ed)?\s+(and\s+corrected\s+)?by|correct(ed|ions)\s+by|ripped\s+by|encoded\s+by|translated\s+by|advertise\s+your\s+product|support\s+us\s+and\s+become\s+vip|contact\s+www|api\.opensubtitles|please\s+rate\s+this\s+subtitle|resync|sub(title)?s?\s+edited\s+by)/i;
@@ -480,104 +476,6 @@ export function checkWatermark(input: string, text = ONFLIX_WATERMARK): Watermar
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-async function errMsg(r: Response) {
-  const e: any = await r.json().catch(() => ({}));
-  return e?.error?.message || e?.message || "";
-}
-
-async function groqModel(model: string, text: string, key: string) {
-  for (let attempt = 0; ; attempt++) {
-    const r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model,
-        temperature: 0.2,
-        messages: [{ role: "system", content: SYS }, { role: "user", content: text }],
-      }),
-    });
-    if (r.status === 429 && attempt < 3) {
-      const ra = Number(r.headers.get("retry-after"));
-      await sleep(Number.isFinite(ra) && ra > 0 ? Math.min(ra, 30) * 1000 : 2000 * 2 ** attempt);
-      continue;
-    }
-    if (!r.ok) throw new Error(`Groq ${model} ${r.status}: ${await errMsg(r)}`);
-    const d = await r.json();
-    return d.choices?.[0]?.message?.content as string;
-  }
-}
-
-async function listModels(url: string, headers: Record<string, string>, pick: (d: any) => string[]) {
-  try {
-    const r = await fetch(url, { headers });
-    return r.ok ? pick(await r.json()) : [];
-  } catch { return []; }
-}
-
-async function tryModels(name: string, preferred: string[], discover: () => Promise<string[]>, call: (m: string) => Promise<string>) {
-  const errors: string[] = [];
-  const tried = new Set<string>();
-  const run = async (list: string[]) => {
-    for (const m of list) {
-      if (tried.has(m)) continue;
-      tried.add(m);
-      try { return await call(m); } catch (e) {
-        errors.push((e as Error).message);
-        if (!/ (404|400):|not found|decommissioned|no longer|not supported|does not exist/i.test((e as Error).message)) throw new Error(errors.join(" | "));
-      }
-    }
-    return null;
-  };
-  const r1 = await run(preferred);
-  if (r1) return r1;
-  const r2 = await run((await discover()).slice(0, 4));
-  if (r2) return r2;
-  throw new Error(`${name}: ${errors.join(" | ") || "no usable model"}`);
-}
-
-async function groq(text: string) {
-  const key = process.env["GROQ_API_KEY"];
-  if (!key) throw new Error("GROQ_API_KEY missing");
-  return tryModels(
-    "Groq",
-    ["llama3-70b-8192", "llama3-8b-8192", "mixtral-8x7b-32768"],
-    () => listModels("https://api.groq.com/openai/v1/models", { Authorization: `Bearer ${key}` }, (d) =>
-      (d.data ?? []).map((m: any) => m.id as string).filter((id: string) => /llama|gpt-oss|qwen|mixtral|gemma/i.test(id) && !/guard|whisper|tts|vision/i.test(id))),
-    (m) => groqModel(m, text, key),
-  );
-}
-
-async function geminiModel(model: string, text: string, key: string) {
-  const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      systemInstruction: { parts: [{ text: SYS }] },
-      contents: [{ role: "user", parts: [{ text }] }],
-      generationConfig: { temperature: 0.2 },
-    }),
-  });
-  if (!r.ok) throw new Error(`Gemini ${model} ${r.status}: ${await errMsg(r)}`);
-  const d = await r.json();
-  return d.candidates?.[0]?.content?.parts?.map((p: any) => p.text).join("") as string;
-}
-
-async function gemini(text: string) {
-  const key = geminiKeys()[0] || process.env["GEMINI_API_KEY"];
-  if (!key) throw new Error("GEMINI_API_KEY missing");
-  return tryModels(
-    "Gemini",
-    ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.5-flash", "gemini-3.6-flash"],
-    () => listModels(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`, {}, (d) =>
-      (d.models ?? [])
-        .filter((m: any) => (m.supportedGenerationMethods ?? []).includes("generateContent"))
-        .map((m: any) => String(m.name).replace(/^models\//, ""))
-        .filter((n: string) => /flash/i.test(n) && !/image|tts|audio|live|exp|preview|lite/i.test(n))
-        .sort().reverse()),
-    (m) => geminiModel(m, text, key),
-  );
-}
-
 export function decodeEntities(t: string) {
   return t
     .replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
@@ -634,25 +532,6 @@ async function translateCueText(text: string, email: string): Promise<string> {
   const parts: string[] = [];
   for (const line of t.split("\n")) parts.push(line.length <= 500 ? await myMemory(line, email) : await myMemory(line.slice(0, 500), email));
   return parts.join("\n");
-}
-
-async function aiTranslateSrt(srt: string, log: Log) {
-  const blocks = srt.replace(/\r/g, "").trim().split(/\n\s*\n/);
-  const out: string[] = [];
-  for (let i = 0; i < blocks.length; i += 80) {
-    if (i > 0) await sleep(600);
-    const chunk = blocks.slice(i, i + 80).join("\n\n");
-    let res: string;
-    try { res = await groq(chunk); } catch (e) {
-      log(`Groq failed (${(e as Error).message}), trying Gemini`);
-      try { res = await gemini(chunk); }
-      catch (e2) { throw new Error(`All AI providers failed — Groq: ${(e as Error).message}; Gemini: ${(e2 as Error).message}`); }
-    }
-    if (!res) throw new Error("Empty translation");
-    out.push(res.replace(/^```\w*\n?|```$/g, "").trim());
-    log(`@@pct:${Math.min(i + 80, blocks.length)}/${blocks.length}`);
-  }
-  return out.join("\n\n") + "\n";
 }
 
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
@@ -817,12 +696,7 @@ async function translateSrtRaw(srt: string, log: Log, s?: Partial<Settings>) {
     return buildSrt(out);
   } catch (e) {
     if (e instanceof GtxRequestError && e.timedOut) throw e;
-    log(`  Google Translate failed (${(e as Error).message}), falling back to Groq/Gemini`);
-  }
-  try {
-    return await aiTranslateSrt(srt, log);
-  } catch (e) {
-    log(`  ${(e as Error).message} — falling back to MyMemory`);
+    log(`  Google Translate failed (${(e as Error).message}), falling back to MyMemory`);
   }
   const email = myMemoryEmail(s);
   const out = await mapCues(cues, (t) => translateCueText(t, email), 4, 100, log);

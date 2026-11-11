@@ -71,6 +71,21 @@ describe("Direct translation", () => {
   });
 });
 
+describe("No Groq fallback", () => {
+  it("never calls Groq, even when Gemini and Google Translate both fail", async () => {
+    vi.stubEnv("GEMINI_API_KEY", "");
+    const urls: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (u: string | URL | Request) => {
+      urls.push(String(u));
+      if (String(u).includes("mymemory")) return Response.json({ responseStatus: 200, responseData: { translatedText: "හරි" } });
+      return new Response("down", { status: 500 });
+    }));
+    const { translateSrt } = await import("@/lib/engine.server");
+    await translateSrt("1\n00:00:01,000 --> 00:00:02,000\nHello there.\n", () => {}).catch(() => "");
+    expect(urls.some((u) => /groq/i.test(u))).toBe(false);
+  }, 60_000);
+});
+
 describe("Reply checking", () => {
   const one: Pair[] = [{ id: 1, en: "Where are you going?" }];
   it("rejects a line written in another language so it is asked again", () => {
@@ -83,6 +98,17 @@ describe("Reply checking", () => {
     const pairs: Pair[] = [{ id: 1, en: "Rachel!" }, { id: 2, en: "Get out!" }];
     const got = parseTranslations(pairs, JSON.stringify({ cues: [{ id: 1, text: "Rachel!" }, { id: 2, text: "Get out!" }] }));
     expect([...got.keys()]).toEqual([1]);
+  });
+  it("reads the JSON even when Gemini adds a sentence before or after it", () => {
+    const body = JSON.stringify({ cues: [{ id: 1, text: "ඔයා කොහෙද යන්නේ?" }] });
+    expect(parseTranslations(one, `Sure, here are the cues:\n\`\`\`json\n${body}\n\`\`\`\nHope this helps!`).get(1)).toBe("ඔයා කොහෙද යන්නේ?");
+    expect(parseTranslations(one, `Here is the translated JSON: ${body}`).get(1)).toBe("ඔයා කොහෙද යන්නේ?");
+  });
+  it("keeps the finished lines from a reply that was cut off midway", () => {
+    const pairs: Pair[] = [{ id: 1, en: "Where are you going?" }, { id: 2, en: "John, wait!" }];
+    const cut = '{"cues":[{"id":1,"text":"ඔයා කොහෙද යන්නේ?"},{"id":2,"text":"ජෝන්, ඉ';
+    const got = parseTranslations(pairs, cut);
+    expect([...got.entries()]).toEqual([[1, "ඔයා කොහෙද යන්නේ?"]]);
   });
   it("ignores unknown ids and broken JSON without throwing", () => {
     expect(parseTranslations(one, "not json").size).toBe(0);

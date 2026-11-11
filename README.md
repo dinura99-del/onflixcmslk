@@ -19,7 +19,7 @@ Key Requirements:
    - Stage 2: Release Processor - Picks items where release_date <= today:
      * EmbedMaster availability check (probe sources_count > 0). If not available -> status 'waiting_embed'.
      * Wyzie English SRT fetch. If not available -> status 'waiting_subtitle'.
-     * AI Sinhala Translation using Groq (openai/gpt-oss-120b) with Gemini (gemini-2.5-flash) fallback.
+     * AI Sinhala Translation using the Gemini multi-key pool (Flash-Lite first), with Google Translate then MyMemory as per-line fallbacks. Groq is never used for subtitles.
      * Supabase Storage upload for Sinhala .srt.
      * Upsert into OnFlix `content` (for movies) and `episodes` (with content_id, season_number, episode_number) and update `content.seasons`.
      * Optional HMAC cache revalidation call.

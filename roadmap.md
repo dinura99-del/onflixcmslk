@@ -7,7 +7,7 @@
 - [x] Test safety rules and verify integration; live two-cue Gemini request returned HTTP 503, so full publish remains unverified.
 - [x] Import OnFlix automation project from uploaded ZIP; 70 tests pass, admin screen loads.
 - [x] Two-stage translation: free Google draft first, then Gemini polish (queue, Manual, GitHub worker); 81 tests pass, not yet run on a real movie.
-- [ ] Add service keys (OnFlix database URL + service key, CRON_SECRET, TMDB, Gemini, Groq, etc.) — waiting on user.
+- [ ] Add service keys (OnFlix database URL + service key, CRON_SECRET, TMDB, Gemini, etc.) — waiting on user.
 - [ ] Point cron-job.org and GitHub Actions at the new address after publishing — waiting on user.
 - [x] Block other-language letters in Sinhala subtitles (new jobs, editor saves, re-publishes); Dark Knight fully repaired.
 - [x] Final review: 503 backoff, all-key rotation, QA-waiting retry with saved polish (95 tests pass; not run on a real movie).
@@ -15,3 +15,4 @@
 - [x] Migrate project from uploaded ZIP into this Lovable project (code, icons, scripts, GitHub worker schedule recreated); 100 of 103 tests pass, admin screen loads.
 - [x] Rebuild Gemini translation as a direct, SinSub-style pipeline with automatic key/model switching; live 1,200-line test done in 28s with 0 English lines; 69 tests pass. Not yet run on a real OnFlix movie.
 - [ ] Optional: remove the unused GEMINI_POLISH_MODEL secret (now ignored) — waiting on user.
+- [x] Remove legacy Groq / old full-SRT Gemini subtitle fallback; harden Gemini reply parsing (extra text, cut-off replies).

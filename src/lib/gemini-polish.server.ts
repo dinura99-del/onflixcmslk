@@ -239,18 +239,44 @@ export function cleanSinhalaText(text: string): string {
 /* Reply validation (tolerant: keep every good line)                   */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Reads the {id,text} list out of a Gemini reply. Tries, in order: the reply as-is, the reply without a
+ * ``` fence, the part between the first "{"/"[" and the last "}"/"]" (drops chatty text around the JSON),
+ * and finally every complete {"id":…,"text":"…"} object it can find, so a cut-off reply still keeps its finished lines.
+ */
+export function readReplyEntries(raw: string): unknown[] {
+  const text = raw.trim();
+  const unfenced = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "");
+  const candidates = [text, unfenced];
+  const start = text.search(/[[{]/);
+  const end = Math.max(text.lastIndexOf("}"), text.lastIndexOf("]"));
+  if (start !== -1 && end > start) candidates.push(text.slice(start, end + 1));
+  for (const candidate of candidates) {
+    try {
+      const value: unknown = JSON.parse(candidate);
+      const list = value && typeof value === "object" && "cues" in value ? (value as { cues: unknown }).cues : value;
+      if (Array.isArray(list)) return list;
+    } catch {
+      /* try the next shape */
+    }
+  }
+  const salvaged: unknown[] = [];
+  const objectRe = /\{\s*"id"\s*:\s*"?(\d+)"?\s*,\s*"text"\s*:\s*("(?:[^"\\]|\\.)*")\s*\}/g;
+  for (const m of text.matchAll(objectRe)) {
+    try {
+      salvaged.push({ id: Number(m[1]), text: JSON.parse(m[2]!) as string });
+    } catch {
+      /* skip a broken object */
+    }
+  }
+  return salvaged;
+}
+
 /** Returns the usable translations by id; ids that are missing, empty, English-only or in another script are left out. */
 export function parseTranslations(targets: Pair[], raw: string): Map<number, string> {
   const result = new Map<number, string>();
   const sourceById = new Map(targets.map((t) => [t.id, t.en]));
-  let value: unknown;
-  try {
-    value = JSON.parse(raw.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, ""));
-  } catch {
-    return result;
-  }
-  const entries = value && typeof value === "object" && "cues" in value ? (value as { cues: unknown }).cues : value;
-  if (!Array.isArray(entries)) return result;
+  const entries = readReplyEntries(raw);
   for (const entry of entries) {
     if (!entry || typeof entry !== "object") continue;
     const id = Number((entry as { id?: unknown }).id);
