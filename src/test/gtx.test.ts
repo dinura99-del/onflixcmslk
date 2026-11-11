@@ -56,38 +56,3 @@ describe("GTX batching", () => {
   });
 });
 
-import { googleDraftTranslation } from "@/lib/engine.server";
-describe("Two-stage pipeline: Google draft before Gemini polish", () => {
-  const three = parseSrt("1\n00:00:01,000 --> 00:00:02,000\nHello\n\n2\n00:00:03,000 --> 00:00:04,000\nRun now\n\n3\n00:00:05,000 --> 00:00:06,000\n1984\n");
-  it("keeps Sinhala draft lines and blanks lines Google left in English, timing untouched", async () => {
-    const map: Record<string, string> = { Hello: "ආයුබෝවන්", "Run now": "Run now", "1984": "1984" };
-    const out = await googleDraftTranslation(three, () => {}, async (t) => t.split("\n").map((l) => map[l] ?? l).join("\n"));
-    expect(out.map((c) => c.text)).toEqual(["ආයුබෝවන්", "", "1984"]);
-    expect(out.map((c) => c.time)).toEqual(three.map((c) => c.time));
-  });
-  it("returns no draft (Gemini translates directly) when Google is down", async () => {
-    const out = await googleDraftTranslation(three, () => {}, async () => { throw new Error("down"); });
-    expect(out).toEqual([]);
-  });
-  it("propagates exhausted GTX timeouts instead of switching to Gemini", async () => {
-    const logs: string[] = [];
-    const timeout = new DOMException("timeout", "TimeoutError");
-    const fetchMock = vi.fn().mockRejectedValue(timeout);
-    vi.stubGlobal("fetch", fetchMock);
-    try {
-      await expect(googleDraftTranslation(
-        three,
-        (message) => logs.push(message),
-        (text) => gtx(text, { timeoutMs: 5, retryDelayMs: 0 }),
-      )).rejects.toThrow("3 retries");
-      expect(fetchMock).toHaveBeenCalledTimes(4);
-      expect(logs.join(" ")).not.toContain("Gemini will translate directly");
-    } finally {
-      vi.unstubAllGlobals();
-    }
-  });
-  it("returns no draft when fewer than half the lines came back in Sinhala", async () => {
-    const out = await googleDraftTranslation(three, () => {}, async (t) => t);
-    expect(out).toEqual([]);
-  });
-});

@@ -795,38 +795,6 @@ export async function gtxBatch(cues: Cue[], log: Log, tr: (t: string) => Promise
   return out;
 }
 
-const SYMBOLS_ONLY = /^[\d\s.,!?:;'"%$\-–—#@&*()\/+]+$/;
-
-/**
- * Stage 1 of the two-stage pipeline: a free Google draft that Gemini then polishes.
- * Lines Google left untranslated become "" so Gemini translates them fresh; if the draft
- * is mostly unusable (or Google is down) returns [] and Gemini translates everything directly.
- */
-export async function googleDraftTranslation(enCues: Cue[], log: Log, tr: (t: string) => Promise<string> = gtx): Promise<Cue[]> {
-  if (!enCues.length) return [];
-  try {
-    log(`  stage 1: free Google Translate draft (${enCues.length} cues)…`);
-    const out = await gtxBatch(enCues, log, tr);
-    let usable = 0;
-    const draft = out.map((c, i) => {
-      const text = fixForeignScript(c.text ?? "").trim();
-      const ok = !!text && (/[\u0D80-\u0DFF]/.test(text) || (SYMBOLS_ONLY.test(text) && SYMBOLS_ONLY.test(enCues[i]!.text.trim())));
-      if (ok) usable++;
-      return { ...enCues[i]!, text: ok ? text : "" };
-    });
-    if (usable < enCues.length * 0.5) {
-      log(`  Google draft only covered ${usable}/${enCues.length} cues — Gemini will translate directly`);
-      return [];
-    }
-    log(`  Google draft ready: ${usable}/${enCues.length} cues (rest translated by Gemini)`);
-    return draft;
-  } catch (e) {
-    if (e instanceof GtxRequestError && e.timedOut) throw e;
-    log(`  Google draft failed (${(e as Error).message}) — Gemini will translate directly`);
-    return [];
-  }
-}
-
 export async function translateSrt(srt: string, log: Log, s?: Partial<Settings>) {
   return sanitizeSinhalaSrt(await translateSrtRaw(srt, log, s));
 }
@@ -836,8 +804,7 @@ async function translateSrtRaw(srt: string, log: Log, s?: Partial<Settings>) {
   const keys = geminiKeys();
   if (keys.length > 0) {
     try {
-      const draft = await googleDraftTranslation(cues, log);
-      const out = await polishCues(cues, draft, log);
+      const out = await polishCues(cues, [], log, { fallbackTranslate: (t) => gtx(t) });
       return buildSrt(out);
     } catch (e) {
       if (e instanceof GtxRequestError && e.timedOut) throw e;
@@ -1538,33 +1505,20 @@ async function processJob(sb: SupabaseClient, s: Settings, j: any, log: Log, opt
     if (!en.trim()) throw new Error("Subtitle empty after cleaning");
     log("@@step:translate");
     const enCues = parseSrt(en);
-    let baseSinhalaCues: Cue[] = [];
-    if (opts.cachedTranslatedSrt && opts.cachedTranslatedSrt.trim()) {
-      const cachedCues = parseSrt(opts.cachedTranslatedSrt);
-      if (cachedCues.length === enCues.length && cachedCues.every((c, i) => c.index === enCues[i]?.index && c.time === enCues[i]?.time)) {
-        baseSinhalaCues = cachedCues;
-        log(`  restored Sinhala translation from local cache (${cachedCues.length} cues)`);
-        log("@@pct:1/1");
-      }
-    }
-    if (!baseSinhalaCues.length) {
-      baseSinhalaCues = await googleDraftTranslation(enCues, log);
-      if (baseSinhalaCues.length) opts.onTranslated?.(buildSrt(baseSinhalaCues));
-    }
-
     // Resume from a QA checkpoint (saved when the final review stopped on Gemini quota/overload)
     let cachedPolished = opts.cachedPolishedCues;
     if (!cachedPolished) {
       const cp = parseSrt(await read(`qa-checkpoint/${existingPath}`));
       if (cp.length === enCues.length && cp.every((c, i) => c.index === enCues[i]?.index && c.time === enCues[i]?.time)) {
         cachedPolished = Object.fromEntries(cp.map((c, i) => [String(i + 1), c.text]));
-        log(`  restored ${cp.length} polished cues from QA checkpoint — retrying unfinished lines and final review without re-polishing`);
+        log(`  restored ${cp.length} translated lines from the saved checkpoint — only the rest will be translated`);
       }
     }
-    log(`  stage 2: polishing via Multi-Key Gemini Engine (${geminiKeys().length} key(s) active)…`);
-    const polishedCues = await polishCues(enCues, baseSinhalaCues, log, {
+    log(`  translating with Gemini (${geminiKeys().length} key(s) active)…`);
+    const polishedCues = await polishCues(enCues, [], log, {
       cachedCues: cachedPolished,
       onChunkDone: opts.onPolishedChunk,
+      fallbackTranslate: (t) => gtx(t),
     });
     opts.onTranslated?.(buildSrt(polishedCues));
     const si = sanitizeSinhalaSrt(addWatermark(buildSrt(polishedCues)));
@@ -1595,11 +1549,11 @@ async function processJob(sb: SupabaseClient, s: Settings, j: any, log: Log, opt
       await set({
         status: "failed",
         attempts,
-        next_retry_at: new Date(Date.now() + 60 * 1000).toISOString(),
-        error_log: `[QA_WAITING] ${e.message} — Gemini busy/quota; unfinished lines and final review retry in 1 min`,
+        next_retry_at: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+        error_log: `[QA_WAITING] ${e.message} — Gemini quota; continues from saved lines in 30 min`,
         srt_preview: sanitizeSinhalaSrt(buildSrt(e.cues)).slice(0, 4000),
       });
-      log(`  ⏸ QA waiting: ${up.error ? "checkpoint save failed, " : "polished cues saved, "}unfinished lines and final review retry in 1 min`);
+      log(`  ⏸ QA waiting: ${up.error ? "checkpoint save failed, " : "polished cues saved, "}continues from saved lines in 30 min`);
       return "qa_waiting";
     }
     if (e instanceof FinalReviewError) {
