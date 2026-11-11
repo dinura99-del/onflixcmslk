@@ -272,16 +272,64 @@ export function matchesEpisode(name: string, j: any) {
   return re.test(name);
 }
 
-async function fetchSubdl(j: any, key: string, log: Log): Promise<string | null> {
-  const byId = await fetchSubdlBy(j, key, log, { tmdb_id: String(j.tmdb_id) });
+/**
+ * Cut check: an English sub made for a different cut (Director's / International) never lines up with the
+ * video, so it is rejected before any translation. Measured on real SubDL subs: matching cuts end 0–12 min
+ * before the TMDB runtime (end credits); wrong cuts were 29 min short or 36 min long.
+ */
+export type CutCheck = { runtimeMin: number | null; downloads: number; rejected: string[] };
+export const CUT_MAX_DOWNLOADS = 4; // SubDL free keys have a small daily download limit
+export const newCutCheck = (runtimeMin: number | null | undefined): CutCheck =>
+  ({ runtimeMin: Number(runtimeMin) > 0 ? Number(runtimeMin) : null, downloads: 0, rejected: [] });
+
+/** Minute the last real (non-ad) cue ends. */
+export function lastCueEndMin(srt: string): number {
+  let end = 0;
+  for (const c of parseSrt(cleanSrt(srt).srt)) {
+    const m = c.time.split("-->")[1]?.match(/(\d+):(\d+):(\d+)[,.](\d+)/);
+    if (m) end = Math.max(end, ((+m[1]! * 60 + +m[2]!) * 60 + +m[3]!) * 1000 + +m[4]!.padEnd(3, "0").slice(0, 3));
+  }
+  return end / 60000;
+}
+
+/** Returns why the sub does not fit the video length, or null when it fits. */
+export function cutMismatch(subEndMin: number, runtimeMin: number): string | null {
+  const sub = Math.round(subEndMin);
+  if (subEndMin > runtimeMin + 5) return `English sub runs ${sub} min but the video is ${runtimeMin} min (longer cut)`;
+  if (runtimeMin - subEndMin > Math.max(15, runtimeMin * 0.1)) return `English sub ends at ${sub} min but the video is ${runtimeMin} min (shorter cut)`;
+  return null;
+}
+
+const EXTRAS_RE = /making[\s._-]?of|behind[\s._-]the[\s._-]scenes|featurette|commentary|trailer|bonus|extras/i;
+/** Reject from the release name alone (no download): extras, or a stated length like "(191 min)" far from the runtime. */
+export function cutMismatchFromName(name: string, title: string, runtimeMin: number): string | null {
+  if (EXTRAS_RE.test(name) && !EXTRAS_RE.test(title)) return `"${name.slice(0, 60)}" is an extra, not the main video`;
+  const m = name.match(/\b(\d{2,3})\s?min/i);
+  if (m && Math.abs(Number(m[1]) - runtimeMin) > 10) return `"${name.slice(0, 60)}" is a ${m[1]} min cut, video is ${runtimeMin} min`;
+  return null;
+}
+
+/** True when the downloaded sub fits; logs and records the reason when it does not. */
+function cutFits(txt: string, label: string, check: CutCheck | undefined, log: Log): boolean {
+  if (!check?.runtimeMin) return true;
+  const why = cutMismatch(lastCueEndMin(txt), check.runtimeMin);
+  if (!why) { log(`  length check OK: sub ends at ${Math.round(lastCueEndMin(txt))} min, video ${check.runtimeMin} min`); return true; }
+  check.rejected.push(why);
+  log(`  ✗ skipped ${label}: ${why}`);
+  return false;
+}
+
+async function fetchSubdl(j: any, key: string, log: Log, check?: CutCheck): Promise<string | null> {
+  const byId = await fetchSubdlBy(j, key, log, { tmdb_id: String(j.tmdb_id) }, check);
   if (byId) return byId;
+  if (check?.rejected.length) return null; // the title was found, only wrong cuts — a name search finds the same subs
   const name = String(j.title ?? "").replace(/\s+S\d+E\d+$/, "").trim();
   if (!name) return null;
   log(`  SubDL: nothing by TMDB ID, searching by name "${name}"…`);
-  return fetchSubdlBy(j, key, log, { film_name: name });
+  return fetchSubdlBy(j, key, log, { film_name: name }, check);
 }
 
-async function fetchSubdlBy(j: any, key: string, log: Log, q: Record<string, string>): Promise<string | null> {
+async function fetchSubdlBy(j: any, key: string, log: Log, q: Record<string, string>, check?: CutCheck): Promise<string | null> {
   const u = new URL("https://api.subdl.com/api/v1/subtitles");
   u.searchParams.set("api_key", key);
   for (const [k, v] of Object.entries(q)) u.searchParams.set(k, v);
@@ -309,7 +357,7 @@ async function fetchSubdlBy(j: any, key: string, log: Log, q: Record<string, str
       if (/\b(?:nf|netflix|amzn|amazon|dsnp|disney|hbo|max|apple|atvp)\b/i.test(name)) s += 30;
       if (/1080p|720p|2160p|4k/i.test(name)) s += 10;
       if (/bluray|bdrip|brrip/i.test(name)) s += 5;
-      if (/cam|hdcam|telesync|ts|hdts|tc|screener|scr|dvdscr/i.test(name)) s -= 100;
+      if (/\b(?:cam|hdcam|telesync|ts|hdts|tc|screener|scr|dvdscr)\b/i.test(name)) s -= 100;
       if (sub.hi) s -= 5;
       return s;
     };
@@ -325,11 +373,20 @@ async function fetchSubdlBy(j: any, key: string, log: Log, q: Record<string, str
     return new TextDecoder().decode(buf);
   };
   for (const sub of scoredSubtitles) {
+    const label = String(sub.release_name ?? sub.name ?? "subtitle");
+    if (check?.runtimeMin) {
+      const why = cutMismatchFromName(label, String(j.title ?? ""), check.runtimeMin);
+      if (why) { check.rejected.push(why); log(`  ✗ skipped ${why}`); continue; }
+      if (check.downloads >= CUT_MAX_DOWNLOADS) { log(`  stopped after ${CUT_MAX_DOWNLOADS} downloads (SubDL daily limit is small)`); return null; }
+    }
     const files: any[] = (sub.unpack_files ?? []).filter((f: any) => String(f.name ?? f.url ?? "").toLowerCase().endsWith(".srt"));
     const file = j.media_type === "tv" ? files.find((f) => matchesEpisode(f.name ?? f.url, j)) ?? (files.length === 1 ? files[0] : null) : files[0];
     try {
-      const txt = file?.url ? await dl(file.url) : sub.url ? await dl(sub.url) : null;
-      if (txt && txt.includes("-->")) return txt;
+      const path = file?.url ?? sub.url;
+      if (!path) continue;
+      if (check) check.downloads++;
+      const txt = await dl(path);
+      if (txt && txt.includes("-->") && cutFits(txt, `"${label.slice(0, 60)}"`, check, log)) return txt;
     } catch (e) {
       if (e instanceof SubdlLimitError) throw e;
       log(`  SubDL download error: ${(e as Error).message}`);
@@ -353,12 +410,12 @@ export function subdlKeys(s?: Partial<Settings>, env: Record<string, string | un
   return out;
 }
 
-export async function fetchEnglishSrt(j: any, s?: Partial<Settings>, log: Log = () => {}): Promise<string | null> {
+export async function fetchEnglishSrt(j: any, s?: Partial<Settings>, log: Log = () => {}, check?: CutCheck): Promise<string | null> {
   const keys = subdlKeys(s);
   if (keys.length) {
     for (let i = 0; i < keys.length; i++) {
       try {
-        const t = await fetchSubdl(j, keys[i]!, log);
+        const t = await fetchSubdl(j, keys[i]!, log, check);
         if (t) { log(`  found English SRT on SubDL${keys.length > 1 ? ` (key ${i + 1})` : ""}`); return t; }
         break; // key works, just no sub
       } catch (e) {
@@ -374,10 +431,10 @@ export async function fetchEnglishSrt(j: any, s?: Partial<Settings>, log: Log = 
   } else {
     log(`  SubDL skipped — no SubDL API key set, falling back to Wyzie…`);
   }
-  return fetchWyzie(j, s);
+  return fetchWyzie(j, s, log, check);
 }
 
-async function fetchWyzie(j: any, s?: Partial<Settings>): Promise<string | null> {
+async function fetchWyzie(j: any, s?: Partial<Settings>, log: Log = () => {}, check?: CutCheck): Promise<string | null> {
   const u = new URL("https://sub.wyzie.io/search");
   const wk = s?.wyzieApiKey?.trim() || process.env["WYZIE_API_KEY"];
   if (wk) u.searchParams.set("key", wk);
@@ -391,10 +448,14 @@ async function fetchWyzie(j: any, s?: Partial<Settings>): Promise<string | null>
   const r = await fetch(u, { redirect: "follow" });
   if (!r.ok) return null;
   const list = await r.json();
-  const first = Array.isArray(list) ? list.find((x: any) => x.url) : null;
-  if (!first) return null;
-  const srt = await fetch(first.url);
-  return srt.ok ? await srt.text() : null;
+  const items: any[] = Array.isArray(list) ? list.filter((x: any) => x.url) : [];
+  for (const item of items.slice(0, check?.runtimeMin ? 3 : 1)) {
+    const srt = await fetch(item.url);
+    if (!srt.ok) continue;
+    const txt = await srt.text();
+    if (txt.includes("-->") && cutFits(txt, `Wyzie "${String(item.release ?? item.media ?? "subtitle").slice(0, 60)}"`, check, log)) return txt;
+  }
+  return null;
 }
 
 const PROMO_DOMAINS = /(opensubtitles|addic7ed|subscene|subdl|yts|yify|podnapisi|tvsubtitles|subsmax|osdb|rarbg|eztv)/i;
@@ -1368,7 +1429,17 @@ async function processJob(sb: SupabaseClient, s: Settings, j: any, log: Log, opt
       log(`  ✓ completed (fast update) — ${url}`); return "completed";
     }
     log("@@step:srt"); log(`  fetching English SRT (SubDL → Wyzie)…`);
-    const raw = await fetchEnglishSrt(j, s, log);
+    // Video length for the cut check (TMDB). Old movie jobs may lack it, so look it up once.
+    let runtimeMin = Number(j.runtime) || null;
+    if (!runtimeMin && j.media_type === "movie") runtimeMin = Number((await tmdb(`/movie/${j.tmdb_id}`).catch(() => null))?.runtime) || null;
+    if (!runtimeMin) log(`  length check skipped — video length unknown on TMDB`);
+    const cut = newCutCheck(runtimeMin);
+    const raw = await fetchEnglishSrt(j, s, log, cut);
+    if (!raw && cut.rejected.length) {
+      await set({ status: "waiting_subtitle", attempts, next_retry_at: retryAt(), error_log: `[Wrong cut] ${cut.rejected[0]} — no matching English sub yet` });
+      log(`  ⚠ only English subs for a different cut were found — not translating; will check again later`);
+      return "waiting_subtitle";
+    }
     if (!raw) {
       await set({ status: "waiting_subtitle", attempts, next_retry_at: retryAt(), error_log: "No English SRT on Wyzie" });
       log(`  waiting for subtitle`); return "waiting_subtitle";
