@@ -463,6 +463,8 @@ const URL_RE = /\b(?:https?:\/\/|www\.)\S+|\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com
 const PROMO_PHRASES = /(subtitles?\s+(by|ripped|downloaded|provided)|downloaded\s+from|sync(ed|hroni[sz]ed)?\s+(and\s+corrected\s+)?by|correct(ed|ions)\s+by|ripped\s+by|encoded\s+by|translated\s+by|advertise\s+your\s+product|support\s+us\s+and\s+become\s+vip|contact\s+www|api\.opensubtitles|please\s+rate\s+this\s+subtitle|resync|sub(title)?s?\s+edited\s+by)/i;
 
 const PROMO_TAIL = new RegExp(PROMO_PHRASES.source + ".*$", "i");
+/** Whole lines that are subtitle-site ads, e.g. Wyzie's free-plan notice it puts as cue 1 (00:00:00 → 00:00:06) of every sub. */
+const PROMO_LINE = /wyzie|you(?:'|\u2019)?re\s+on\s+the\s+free\s+plan|ad[-\s]?free\s+subs|unlock\s+every\s+source/i;
 
 /** Remove watermark/promo text from an SRT, drop promo-only cues and re-index from 1. */
 export function cleanSrt(input: string): { srt: string; removed: number } {
@@ -475,6 +477,7 @@ export function cleanSrt(input: string): { srt: string; removed: number } {
     if (ti === -1) { removed++; continue; }
     const text = lines
       .slice(ti + 1)
+      .filter((l) => !PROMO_LINE.test(l))
       .map((l) => l.replace(PROMO_TAIL, ""))
       .map((l) => l.replace(URL_RE, "").replace(PROMO_DOMAINS, (m) => (/[a-z]/.test(m) && l.includes(".") ? "" : m)))
       .map((l) => l.replace(/<\/?font[^>]*>/gi, "").replace(/\s{2,}/g, " ").trim())

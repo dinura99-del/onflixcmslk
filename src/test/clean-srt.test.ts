@@ -38,3 +38,22 @@ describe("cleanSrt", () => {
     expect(srt).toContain("00:00:13,000 --> 00:00:15,000");
   });
 });
+
+describe("cleanSrt — Wyzie free-plan ad", () => {
+  const WYZIE = `1
+00:00:00,000 --> 00:00:06,000
+You're on the free plan. Unlock every source, AI translation & ad-free subs → sub.wyzie.io
+
+2
+00:01:07,660 --> 00:01:11,660
+I'm free now. You're on the plan, right?
+`;
+  const { srt, removed } = cleanSrt(WYZIE);
+  it("drops the whole ad cue, not just the link", () => {
+    expect(removed).toBe(1);
+    expect(srt).not.toMatch(/free plan|ad-free|wyzie|→/i);
+  });
+  it("keeps normal dialogue that uses the same words", () => {
+    expect(srt).toBe("1\n00:01:07,660 --> 00:01:11,660\nI'm free now. You're on the plan, right?\n");
+  });
+});
