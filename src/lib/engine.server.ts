@@ -466,27 +466,51 @@ const PROMO_TAIL = new RegExp(PROMO_PHRASES.source + ".*$", "i");
 /** Whole lines that are subtitle-site ads, e.g. Wyzie's free-plan notice it puts as cue 1 (00:00:00 → 00:00:06) of every sub. */
 const PROMO_LINE = /wyzie|you(?:'|\u2019)?re\s+on\s+the\s+free\s+plan|ad[-\s]?free\s+subs|unlock\s+every\s+source/i;
 
-/** Remove watermark/promo text from an SRT, drop promo-only cues and re-index from 1. */
-export function cleanSrt(input: string): { srt: string; removed: number } {
+/** Speaker label at line start, e.g. "JOHN:", "- MAN 2:", "<i>NARRATOR:" (all caps only, so normal dialogue is kept). */
+const SPEAKER_LABEL = /^((?:\s*<[^>]+>)*\s*-?\s*)[A-Z][A-Z0-9 .'&-]*[A-Z0-9.]:(?=\s|$)\s*/;
+
+/**
+ * Hearing-impaired (SDH) cleanup, the same idea as Subtitle Edit's "Remove text for hearing impaired":
+ * drops sound descriptions in [brackets] / (parentheses), all-caps speaker labels and music-only lines,
+ * so "(gunshot)" or "[woman screaming]" never reach the translator. Returns "" when nothing spoken is left.
+ */
+export function stripHearingImpaired(text: string): string {
+  const before = text.split("\n").length;
+  const lines = text
+    .replace(/\[[^\]]*\]|\([^)]*\)/g, "")
+    .split("\n")
+    .map((l) => l.replace(SPEAKER_LABEL, "$1").replace(/[^\S\n]{2,}/g, " ").replace(/\s+([?!.,])/g, "$1").replace(/,{2,}/g, ",").trim())
+    .filter((l) => l.replace(/<[^>]+>|[\s\-–—:|.,!?"'*#~♪♫]/g, "").length > 0);
+  // "- [grunts]\n- Run!" → "Run!": a lone speaker dash is only removed when a tag line was dropped
+  if (lines.length === 1 && before > 1) lines[0] = lines[0]!.replace(/^((?:<[^>]+>)*)\s*[-–—]\s*/, "$1");
+  return lines.join("\n");
+}
+
+/** Remove watermark/promo text and hearing-impaired sound tags from an SRT, drop cues left empty and re-index from 1. */
+export function cleanSrt(input: string): { srt: string; removed: number; soundTags: number } {
   const blocks = input.replace(/^\uFEFF/, "").replace(/\r/g, "").trim().split(/\n\s*\n/);
   const kept: { time: string; text: string[] }[] = [];
   let removed = 0;
+  let soundTags = 0;
   for (const b of blocks) {
     const lines = b.split("\n");
     const ti = lines.findIndex((l) => l.includes("-->"));
     if (ti === -1) { removed++; continue; }
-    const text = lines
+    const promoFree = lines
       .slice(ti + 1)
       .filter((l) => !PROMO_LINE.test(l))
       .map((l) => l.replace(PROMO_TAIL, ""))
       .map((l) => l.replace(URL_RE, "").replace(PROMO_DOMAINS, (m) => (/[a-z]/.test(m) && l.includes(".") ? "" : m)))
       .map((l) => l.replace(/<\/?font[^>]*>/gi, "").replace(/\s{2,}/g, " ").trim())
-      .filter((l) => l.replace(/<[^>]+>|[\s\-–—:|.,!?()\[\]{}"'*#~]/g, "").length > 0);
-    if (!text.length) { removed++; continue; }
-    kept.push({ time: lines[ti]!.trim(), text });
+      .filter((l) => l.replace(/<[^>]+>|[\s\-–—:|.,!?()\[\]{}"'*#~]/g, "").length > 0)
+      .join("\n");
+    const spoken = stripHearingImpaired(promoFree);
+    if (spoken !== promoFree) soundTags++;
+    if (!spoken) { removed++; continue; }
+    kept.push({ time: lines[ti]!.trim(), text: spoken.split("\n") });
   }
   const srt = kept.map((c, i) => `${i + 1}\n${c.time}\n${c.text.join("\n")}`).join("\n\n");
-  return { srt: srt ? srt + "\n" : "", removed };
+  return { srt: srt ? srt + "\n" : "", removed, soundTags };
 }
 
 export const ONFLIX_WATERMARK = "OnFlix.lk වෙතින් සිංහල උපසිරැසි";
@@ -1448,8 +1472,8 @@ async function processJob(sb: SupabaseClient, s: Settings, j: any, log: Log, opt
       log(`  waiting for subtitle`); return "waiting_subtitle";
     }
     log("@@step:clean");
-    const { srt: en, removed } = cleanSrt(raw);
-    log(`  cleaned watermarks/ads (${removed} cue${removed === 1 ? "" : "s"} removed)`);
+    const { srt: en, removed, soundTags } = cleanSrt(raw);
+    log(`  cleaned watermarks/ads/sound tags (${removed} cue${removed === 1 ? "" : "s"} removed, ${soundTags} cue${soundTags === 1 ? "" : "s"} had [sound]/(sound) or SPEAKER: text stripped)`);
     if (!en.trim()) throw new Error("Subtitle empty after cleaning");
     log("@@step:translate");
     const enCues = parseSrt(en);

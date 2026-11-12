@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { cleanSrt } from "@/lib/engine.server";
+import { cleanSrt, stripHearingImpaired } from "@/lib/engine.server";
 
 const SRT = `1
 00:00:01,000 --> 00:00:03,000
@@ -56,4 +56,57 @@ I'm free now. You're on the plan, right?
   it("keeps normal dialogue that uses the same words", () => {
     expect(srt).toBe("1\n00:01:07,660 --> 00:01:11,660\nI'm free now. You're on the plan, right?\n");
   });
+});
+
+describe("cleanSrt — hearing-impaired sound tags", () => {
+  const SDH = `1
+00:00:01,000 --> 00:00:02,000
+(gunshot)
+
+2
+00:00:03,000 --> 00:00:04,000
+[woman screaming]
+
+3
+00:00:05,000 --> 00:00:07,000
+- (gasps) What was that?
+- [door slams] Get down!
+
+4
+00:00:08,000 --> 00:00:09,000
+JOHN: We need to go.
+
+5
+00:00:10,000 --> 00:00:11,000
+<i>(GUNSHOTS
+CONTINUE)</i>
+
+6
+00:00:12,000 --> 00:00:13,000
+♪ ♪
+
+7
+00:00:14,000 --> 00:00:15,000
+- [grunts]
+- Run!
+
+8
+00:00:16,000 --> 00:00:17,000
+Okay: listen to me, Mr. Reese.
+`;
+  const { srt, removed, soundTags } = cleanSrt(SDH);
+  const texts = srt.trim().split("\n\n").map((b) => b.split("\n").slice(2).join("\n"));
+  it("drops cues that are only sound descriptions", () => expect(removed).toBe(4));
+  it("keeps the spoken words and their timing", () => {
+    expect(texts).toEqual(["- What was that?\n- Get down!", "We need to go.", "Run!", "Okay: listen to me, Mr. Reese."]);
+    expect(srt).toContain("00:00:05,000 --> 00:00:07,000");
+  });
+  it("counts cues that had sound tags or speaker labels", () => expect(soundTags).toBe(7));
+});
+
+describe("stripHearingImpaired — keeps normal dialogue formatting", () => {
+  it("keeps a two-speaker dash line untouched", () => {
+    expect(stripHearingImpaired("- Is this your first... - What?")).toBe("- Is this your first... - What?");
+  });
+  it("keeps ellipsis", () => expect(stripHearingImpaired("(sighs) Well...")).toBe("Well..."));
 });
