@@ -1,5 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { groupQueueSeasons } from "@/lib/queue-groups";
 import {
   getEnv, getOverview, listJobs, getPreview, retryJob, deleteJob, deleteJobs, loadSettings, updateSettings, scanNow, processNow, tvSeasons,
   listUserRequests, updateUserRequestStatus, deleteUserRequest, getPendingRequestsCount, trackForAutomation,
@@ -1196,6 +1198,7 @@ function Queue({ k }: { k: string }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busyId, setBusyId] = useState<string | null>(null);
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [seasonExpanded, setSeasonExpanded] = useState<Record<string, boolean>>({});
 
   const load = useCallback(() => listJobs({ data: { key: k, status, q } }).then((r) => {
     setRows(r);
@@ -1209,6 +1212,7 @@ function Queue({ k }: { k: string }) {
   }).catch((e) => setErr(e.message)), [k, status, q]);
 
   useEffect(() => { const t = setTimeout(load, 250); return () => clearTimeout(t); }, [load]);
+  useEffect(() => { const timer = setInterval(load, 15000); return () => clearInterval(timer); }, [load]);
   useEffect(() => { const timer = setInterval(() => setClockNow(Date.now()), 1000); return () => clearInterval(timer); }, []);
 
   const toggleSelectAll = () => {
@@ -1273,6 +1277,7 @@ function Queue({ k }: { k: string }) {
 
   const completedCount = rows.filter((r) => r.status === "completed").length;
   const displayRows = orderQueueRowsForDisplay(rows);
+  const seasonGroups = groupQueueSeasons(displayRows, status === "all" && !q.trim());
 
   return (
     <div className="space-y-4">
@@ -1342,7 +1347,30 @@ function Queue({ k }: { k: string }) {
             </tr>
           </thead>
           <tbody>
-            {displayRows.map((r) => (
+            {seasonGroups.map((group) => {
+              const expansionKey = `${group.key}:${group.defaultCollapsed}`;
+              const expanded = seasonExpanded[expansionKey] ?? !group.defaultCollapsed;
+              return (
+                <Fragment key={group.key}>
+                  {group.isTv && (
+                    <tr className="border-t border-border bg-secondary/40">
+                      <td colSpan={9} className="px-4 py-2">
+                        <Button
+                          variant="ghost"
+                          className="h-auto min-h-9 w-full justify-start whitespace-normal text-left"
+                          aria-expanded={expanded}
+                          aria-label={`${expanded ? "Collapse" : "Expand"} ${group.title} Season ${group.season ?? 0}`}
+                          onClick={() => setSeasonExpanded((prev) => ({ ...prev, [expansionKey]: !expanded }))}
+                        >
+                          <ChevronRight className={`size-4 shrink-0 transition-transform ${expanded ? "rotate-90" : ""}`} />
+                          <span className="min-w-0 break-words">{group.title} · Season {group.season ?? 0}</span>
+                          <span className="ml-auto shrink-0 text-xs text-muted-foreground">{group.completedCount}/{group.rows.length} completed</span>
+                          {group.defaultCollapsed && <CheckCircle2 className="size-4 text-success" />}
+                        </Button>
+                      </td>
+                    </tr>
+                  )}
+                  {expanded && group.rows.map((r) => (
               <tr key={r.id} className="border-t border-border align-top hover:bg-muted/30 transition-colors">
                 <td className="px-4 py-3">
                   <input
@@ -1400,7 +1428,10 @@ function Queue({ k }: { k: string }) {
                   </div>
                 </td>
               </tr>
-            ))}
+                  ))}
+                </Fragment>
+              );
+            })}
             {!rows.length && <tr><td colSpan={9} className="px-4 py-12 text-center text-muted-foreground">No jobs</td></tr>}
           </tbody>
         </table>

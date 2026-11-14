@@ -1,4 +1,5 @@
 # Tasks
+- [x] Fold completed Live Queue seasons into expandable episode lists; keep unfinished seasons open.
 - [x] Add all-key cooldown-aware leftover retries, strict Sinhala output, and checkpoint recovery; regression tests pass, real quota-limited publish remains unverified.
 - [x] Add bounded HTTP 503 retry after two seconds and Flash model fallback; 21 tests pass, including recovery, cancellation and immutable timing; live publish remains unverified.
 - [x] Add bounded multi-key Gemini Flash post-editing after base translation.

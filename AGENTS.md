@@ -30,6 +30,7 @@ use the editor.
 <!-- LOVABLE:END -->
 
 ## Project rules
+- Group Live Queue TV rows by show and season using browser-safe queue helpers; collapse only fully completed unfiltered queued groups, because filtered rows cannot establish season completion.
 - Automation engine lives in `src/lib/engine.server.ts` and talks to the external OnFlix Supabase via service-role secrets; dashboard server functions and `/api/public/cron/*` both gate on `CRON_SECRET`, because the admin has no separate login.
 - Keep Gemini subtitle translation in `src/lib/gemini-polish.server.ts` as a direct English→Sinhala pipeline using the user-owned multi-key REST pool: send only cue id + English text in batches, map replies back by id, re-ask only bad/missing ids, then fall back per line to Google GTX, because the old draft/audit/hard-gate layers burned quota and blocked whole subtitles.
 - Quota handling lives in the key/model pool: a daily-quota 429 (or repeated 429s/timeouts) parks that key for that model, and when every key is parked the next model in `modelPriority()` is used; Flash-Lite is first because measured free-tier Flash quotas are ~20 requests/key/day.
