@@ -23,6 +23,12 @@ describe("Model choice", () => {
   it("uses GEMINI_MODEL_ORDER when set", () => {
     expect(modelPriority({ GEMINI_MODEL_ORDER: "gemini-3.6-flash, gemini-3.1-flash-lite" })).toEqual(["gemini-3.6-flash", "gemini-3.1-flash-lite"]);
   });
+  it("appends the requested models without changing the existing priority", () => {
+    expect(modelPriority({})).toEqual([
+      "gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.5-flash", "gemini-3.6-flash",
+      "gemini-3.8-flash", "gemini-3-flash-preview", "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.5-pro",
+    ]);
+  });
   it("collects primary, comma-separated and numbered keys in order without duplicates", () => {
     expect(geminiKeys({ GEMINI_API_KEY_2: "c", GEMINI_API_KEY: "a,b", GEMINI_API_KEY_1: "b", OTHER: "x" })).toEqual(["a", "b", "c"]);
   });
@@ -117,6 +123,20 @@ describe("Reply checking", () => {
 });
 
 describe("Quota handling", () => {
+  it("advances through all requested fallback models when earlier models exhaust daily quota", async () => {
+    const seen: string[] = [];
+    const out = await polishCues(en, [], () => {}, { ...quick, keys: ["a"], models: modelPriority({}),
+      generate: async (_key, targets, _context, _signal, model) => {
+        seen.push(model);
+        if (model !== "gemini-2.5-pro") throw new RateLimitError(3_600_000, 429, true);
+        return reply(targets);
+      } });
+    expect(seen).toEqual([
+      "gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.5-flash", "gemini-3.6-flash",
+      "gemini-3.8-flash", "gemini-3-flash-preview", "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.5-pro",
+    ]);
+    expect(out[0]?.text).toBe("ඔයා කොහෙද යන්නේ?");
+  });
   it("parks a key whose daily quota is gone and finishes on the next key", async () => {
     const used: string[] = [];
     const out = await polishCues(en, [], () => {}, { ...quick, keys: ["a", "b"], models: ["m1"], generate: async (key, t) => {

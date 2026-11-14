@@ -305,7 +305,18 @@ export function parseTranslations(targets: Pair[], raw: string): Map<number, str
  * models allow only ~20 requests per key per day (measured live: gemini-3.8-flash returned 429/timeouts on all keys).
  * The old GEMINI_POLISH_MODEL setting is intentionally ignored; set GEMINI_MODEL_ORDER="a,b,c" to change the order.
  */
-export const DEFAULT_MODELS = ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.5-flash", "gemini-3.6-flash"];
+export const DEFAULT_MODELS = [
+  "gemini-3.5-flash-lite",
+  "gemini-3.1-flash-lite",
+  "gemini-3.5-flash",
+  "gemini-3.6-flash",
+  "gemini-3.8-flash",
+  // Google's catalog exposes Gemini 3 Flash under its preview ID.
+  "gemini-3-flash-preview",
+  "gemini-2.5-flash",
+  "gemini-2.5-flash-lite",
+  "gemini-2.5-pro",
+];
 
 export function modelPriority(env: Record<string, string | undefined> = process.env): string[] {
   const custom = (env["GEMINI_MODEL_ORDER"] ?? "").split(",").map((m) => m.trim()).filter((m) => /^gemini-[a-z0-9.-]+$/.test(m));
